@@ -1,0 +1,30 @@
+accept: Description: One hand forms a flat hand at the chest. The palm taps the upper chest once with brief contact.
+account: Description: Two hands form pointing handshapes in the neutral space in front of the chest. The hands move towards each other and then pull back apart in a single motion, with the index fingers continuously pointing at one another.
+bad: Description: One hand, with the index finger and thumb pinched together, is held in the neutral space in front of the chin. The hand moves slightly forward as the index and middle fingers flick open and spread apart from the thumb.
+bank: Description: Two hands, one flat and one a thumbs-up, are positioned in the neutral space in front of the abdomen. The right thumbs-up hand starts at the base of the stationary, flat left palm and slides forward across it toward the fingertips.
+bite: Description: Two hands form an open shape with bent fingers in neutral space. The right hand moves over the back of the stationary left hand as the right fingertips rub across it.
+body: Description: Two hands, with thumbs and pinkies extended from fists, are positioned near the upper chest. The thumbs make contact with the upper chest on each side, and then both hands move downwards in a short, parallel motion.
+bond: Description: Two hands form open, flat handshapes in the neutral space in front of the chest. The hands move towards each other until the fingertips of both hands meet and make contact.
+bone: Description: One hand with slightly spread fingers is held in neutral space. The fingertips and thumb move together to meet at a single point.
+chain: Description: Two hands form a pinch shape in the neutral space in front of the chest. The hands move towards each other, the fingertips link briefly, and then they pull apart.
+check: Description: One hand, with the index and middle fingers extended and separated, is held near the face. The hand moves forward and downward away from the eye as the middle finger bends toward the palm.
+chubby: Description: Two hands with open, curved fingers are held in the space near the sides of the head. The hands simultaneously move inwards towards each other and then outwards back to their starting positions in a single, smooth motion.
+closed: Description: Two hands form open, flat palms in front of the face. The fingertips of both hands move inward to make brief contact with the mouth before moving forward away from the face.
+cook: Description: One hand forms a fist with the index finger hooked forward in neutral space. The hand moves downward in a short, sharp motion.
+count: Description: One hand, with the index and middle fingers crossed and the other fingers in a fist, is held in the neutral space in front of the abdomen. The hand makes a short, sharp downward movement.
+cry: Description: One hand, with the index and middle fingers held together and touching the thumb, is positioned in front of the face. The hand moves upward, and the fingertips tap the tip of the nose.
+doll: Description: Two hands form open, slightly cupped shapes in the neutral space in front of the abdomen. The right hand moves downward to make brief contact inside the stationary, upward-facing palm of the left hand.
+dot: Description: One hand forms a pinch with the index finger and thumb in neutral space near the shoulder. The hand moves forward and back in a short, quick motion.
+ear: Description: One hand forms a pinch shape near the side of the head. The hand moves to the ear and briefly grasps the earlobe.
+eat: Description: One hand forms a pinch shape near the face. The hand moves upward, and the fingertips tap the chin once.
+face: Description: One hand forms a pinch shape near the face. The pinched fingers tap the side of the throat, then move upward to tap the temple.
+family: Description: Two hands form open, slightly cupped shapes in neutral space. The hands begin close together with palms facing each other, then pivot at the wrists to open outwards until the palms face upwards.
+foot: Description: Two hands, one open and palm-up and the other flat and pointing down, are positioned in the abdominal area. The right hand sweeps across the palm of the left hand from the wrist towards the fingers, after which both hands move slightly down and away from each other.
+group: Description: Two hands form open, slightly curved shapes in the neutral space in front of the abdomen. The hands start apart and move towards each other in a single, smooth motion, ending close together without contact.
+help: Description: Two hands form a pinch shape in neutral space in front of the upper chest. Both hands move downwards simultaneously in a short, sharp motion.
+listen: Description: One hand forms an open, cupped shape near the head. The hand moves up to the side of the head and cups behind the ear without making contact, holds the position, and then moves away.
+massage: Description: Two hands form flat palms in the neutral space in front of the abdomen. The right palm is placed on top of the back of the left hand with brief contact.
+medical: Description: Two hands, one an open palm and the other a flat hand, are positioned in neutral space in front of the abdomen. With the left palm facing up, the fingertips of the right hand tap the inside of the left wrist twice.
+necklace: Description: One open hand is used on the chest and abdomen. The hand starts flat on the upper chest and rubs downwards in a single motion to the abdomen.
+order: Description: One hand forms a pinch shape in the neutral space. The hand moves forward as the tips of the index finger and thumb come together to touch.
+pressure: Description: Two hands form a pinch shape at the temples. The hands make brief contact, then move forward while closing into fists.

@@ -1,0 +1,4 @@
+ActualWord	PredictedWord	Confidence	TestDescription
+accept	accept		One hand forms a flat palm in the chest area. The hand moves inward to tap the upper chest once.
+account	account		Two hands form pointing handshapes in the neutral space. The hands move towards each other until the index fingers are pointing at one another without contact, and then they move apart.
+bad	bad		One hand, with the index finger and thumb pinched together, is held in the neutral space in front of the chin. The hand moves slightly forward as the index and middle fingers flick open and spread apart from the thumb.
