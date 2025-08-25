@@ -3,7 +3,7 @@ setlocal
 
 REM Define lists for parameters
 set seed_list=1
-set method_list=c3d c3d_pretrained cnn_lstm cnn_lstm_pretrained mhi_baseline mhi_fusion mhi_attention mediapipe mediapipe_transformer mediapipe_lstm
+set method_list=c3d c3d_pretrained cnn_lstm cnn_lstm_pretrained mhi_fusion mhi_attention mediapipe_transformer mediapipe_lstm
 set num_words_list=1
 set epochs_list=3
 set batch_size_list=1

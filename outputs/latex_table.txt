@@ -1,0 +1,20 @@
+\begin{table}[h]
+\centering
+\caption{Signer-independent Top-1 accuracy (\%) on PSL test set with 30 words. Best test result in \textbf{bold}.}
+\label{tab:main_results}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{Train Acc.} & \textbf{Test Acc.} \\
+\midrule
+CNN+LSTM (Scratch) & 0.40 & 0.03 \\
+3D CNN (R3D-18, Scratch) & 0.90 & 0.03 \\
+MediaPipe Keypoints + Transformer & 0.93 & 0.10 \\
+MediaPipe Keypoints + LSTM & 0.83 & 0.07 \\
+MHI Fusion & 0.53 & 0.00 \\
+MHI Attention & 0.77 & 0.03 \\
+Gemini-LoRA (Finetuned) & 0.52 & 0.32 \\
+Ours (Zero-Shot Matching) & 0.90 & \textbf{0.63} \\
+Ours (Semantic Shot) & 0.87 & \textbf{0.63} \\
+\bottomrule
+\end{tabular}
+\end{table}

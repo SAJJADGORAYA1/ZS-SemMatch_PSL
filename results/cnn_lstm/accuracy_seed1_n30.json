@@ -1,0 +1,7 @@
+{
+  "method": "cnn_lstm",
+  "num_words": 30,
+  "train_accuracy": 0.4,
+  "test_accuracy": 0.03333333333333333,
+  "epochs": 50
+}

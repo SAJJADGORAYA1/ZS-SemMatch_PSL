@@ -29,7 +29,7 @@ from methods.zero_shot_semantic_matching import run_zero_shot_matching, run_sema
 def main():
     parser = argparse.ArgumentParser(description='Run PSL baseline methods')
     parser.add_argument('--method', type=str, required=True,
-                       choices=['c3d', 'c3d_pretrained', 'cnn_lstm', 'cnn_lstm_pretrained', 'mediapipe', 'mediapipe_transformer', 'mediapipe_lstm', 'mhi_baseline', 'mhi_fusion', 'mhi_attention', 'finetuned_gemini', 'zero_shot', 'semantic_shot'],
+                       choices=['c3d', 'c3d_pretrained', 'cnn_lstm', 'cnn_lstm_pretrained', 'mediapipe_transformer', 'mediapipe_lstm', 'mhi_fusion', 'mhi_attention', 'finetuned_gemini', 'zero_shot', 'semantic_shot'],
                        help='Method to run')
     parser.add_argument('--num_words', type=int, default=1, help='Number of words to test')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
@@ -55,20 +55,18 @@ def main():
         results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=False)
     elif args.method == 'cnn_lstm_pretrained':
         results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=True)
-    elif args.method == 'mediapipe':
-        results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size)
+    # Removed plain mediapipe option - only transformer and lstm backends available
     elif args.method == 'mediapipe_transformer':
         results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='transformer')
     elif args.method == 'mediapipe_lstm':
         results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='lstm')
-    elif args.method == 'mhi_baseline':
-        results = run_mhi(num_words=args.num_words, mode='baseline', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=not args.no_pretrained)
+    # Removed plain mhi_baseline option - only fusion and attention variants available
     elif args.method == 'mhi_fusion':
         results = run_mhi(num_words=args.num_words, mode='fusion', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=not args.no_pretrained)
     elif args.method == 'mhi_attention':
         results = run_mhi(num_words=args.num_words, mode='attention', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=not args.no_pretrained)
     elif args.method == 'finetuned_gemini':
-        results = run_finetuned_gemini(num_words=args.num_words, seed=args.seed)
+        results = run_finetuned_gemini(num_words=args.num_words, seed=args.seed, out_dir=args.out_dir)
     elif args.method == 'zero_shot':
         results = run_zero_shot_matching(num_words=args.num_words, seed=args.seed)
     elif args.method == 'semantic_shot':

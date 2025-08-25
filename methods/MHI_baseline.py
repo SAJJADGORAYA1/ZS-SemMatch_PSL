@@ -15,7 +15,7 @@ from torchvision import transforms, models
 from typing import List, Tuple, Optional
 import math
 import torch.optim as optim
-from device_utils import get_best_device, to_device, device_info
+from utils.device_utils import get_best_device, to_device, device_info
 from tqdm import tqdm
 
 # ========== Configuration ==========

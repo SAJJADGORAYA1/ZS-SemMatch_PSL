@@ -246,18 +246,10 @@ def listen_for_stop():
 
 def run_zero_shot_mode(allowed_words, train_descs, client, model):
     """Run the testing_2.py logic (zero shot mode)"""
-    print("Running in ZERO_SHOT mode (testing_2.py logic)")
+    print("Running in ZERO_SHOT mode")
     
     reference_block = build_reference_block(train_descs, allowed_words)
     allowed_words_str = ", ".join(f'"{w}"' for w in allowed_words)
-
-    # Clear/initialize output files
-    print(f"[DEBUG] Initializing output files: {ZERO_SHOT_TEST_DESC_FILE}, {ZERO_SHOT_PRED_FILE}")
-    # Ensure outputs directory exists
-    os.makedirs(OUTPUTS_DIR, exist_ok=True)
-    open(ZERO_SHOT_TEST_DESC_FILE, "w", encoding="utf-8").close()
-    open(ZERO_SHOT_PRED_FILE, "w", encoding="utf-8").close()
-    append_line(ZERO_SHOT_PRED_FILE, "ActualWord\tPredictedWord\tConfidence\tTestDescription")
 
     # Collect results for standardized output
     actual_words = []
@@ -268,14 +260,14 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
             print("Stopping as requested by user.")
             break
 
-        test_filename = get_test_filename(word)
-        test_gcs_uri = f"{gcs_prefix_test}{test_filename}"
-        print(f"[DEBUG] Processing word: '{word}' | Test filename: '{test_filename}' | GCS URI: '{test_gcs_uri}'")
-
-        # Check if local test file exists (for debugging naming issues)
-        local_test_path = os.path.join(video_dir_test, test_filename)
-        if not os.path.exists(local_test_path):
-            print(f"[WARNING] Local test video not found: {local_test_path}")
+        # Use training videos (this function is for training data)
+        video_filename = f"{word}.MOV"
+        gcs_uri = f"{gcs_prefix_train}{video_filename}"
+        local_path = os.path.join(video_dir_train, video_filename)
+        
+        # Check if local video file exists (for debugging naming issues)
+        if not os.path.exists(local_path):
+            print(f"[WARNING] Local training video not found: {local_path}")
 
         # Compose the full instruction (references + allowed words)
         instruction = (
@@ -284,14 +276,13 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
             + reference_block
         )
 
-        print(f"[DEBUG] Instruction for model:\n{instruction}\n")
         contents = [
             types.Content(
                 role="user",
                 parts=[
                     types.Part(
                         file_data=types.FileData(
-                            file_uri=test_gcs_uri,
+                            file_uri=gcs_uri,
                             mime_type="video/MOV",
                         )
                     ),
@@ -319,7 +310,7 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
             print(f"\n[DEBUG] Sending request to model for word: {word}")
             print(f"[DEBUG] Request details:")
             print(f"  - Model: {model}")
-            print(f"  - Video URI: {test_gcs_uri}")
+            print(f"  - Video URI: {gcs_uri}")
             print(f"  - Content length: {len(instruction)} chars")
             
             resp = client.models.generate_content(
@@ -340,7 +331,6 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
             
             if not output_text:
                 print(f"[ERROR] Empty response from model for word: {word}")
-                print(f"[DEBUG] Full response object: {resp}")
             elif len(output_text) < 10:
                 print(f"[WARNING] Suspiciously short response for word: {word}")
                 
@@ -352,12 +342,122 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
             continue
 
         test_desc, best_guess, confidence = parse_model_guess(output_text)
+
+
+        if not test_desc:
+            print(f"[WARNING] No test description parsed for word: {word}")
+        if not best_guess:
+            print(f"[WARNING] No best guess parsed for word: {word}")
+
+        # Console summary
+        print(f"\n=== {word} [train] ===")
+        print(f"Best guess: {best_guess}")
+        print("=====================\n")
+
+        # Collect results for standardized output
+        actual_words.append(word)
+        predicted_words.append(best_guess)
+
+    return actual_words, predicted_words
+
+def run_zero_shot_mode_test(allowed_words, train_descs, client, model):
+    """Run the testing_2.py logic for test videos"""
+    print("Running in ZERO_SHOT mode for TEST videos")
+    
+    reference_block = build_reference_block(train_descs, allowed_words)
+    allowed_words_str = ", ".join(f'"{w}"' for w in allowed_words)
+
+    # Collect results for standardized output
+    actual_words = []
+    predicted_words = []
+
+    for word in allowed_words:
+        if stop_flag:
+            print("Stopping as requested by user.")
+            break
+
+        # Use test videos
+        video_filename = get_test_filename(word)
+        gcs_uri = f"{gcs_prefix_test}{video_filename}"
+        local_path = os.path.join(video_dir_test, video_filename)
         
-        # Add debug for parsing results
-        print(f"[DEBUG] Parsed results for {word}:")
-        print(f"  - Description: {bool(test_desc)} ({len(test_desc)} chars)")
-        print(f"  - Best guess: {bool(best_guess)} ({best_guess})")
-        print(f"  - Confidence: {bool(confidence)} ({confidence})")
+        # Check if local video file exists (for debugging naming issues)
+        if not os.path.exists(local_path):
+            print(f"[WARNING] Local test video not found: {local_path}")
+
+        # Compose the full instruction (references + allowed words)
+        instruction = (
+            PROMPT_HEADER_ZERO_SHOT
+            + "REFERENCE DESCRIPTIONS (one per word):\n"
+            + reference_block
+        )
+
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part(
+                        file_data=types.FileData(
+                            file_uri=gcs_uri,
+                            mime_type="video/MOV",
+                        )
+                    ),
+                    types.Part(text=instruction),
+                ],
+            )
+        ]
+
+        generate_content_config = types.GenerateContentConfig(
+            temperature=0.0,      # deterministic
+            top_p=1,
+            seed=0,
+            max_output_tokens=12000,
+            safety_settings=[
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="OFF"),
+            ],
+            thinking_config=types.ThinkingConfig(thinking_budget=-1),
+            media_resolution="MEDIA_RESOLUTION_LOW",
+        )
+
+        try:
+            print(f"\n[DEBUG] Sending request to model for word: {word}")
+            print(f"[DEBUG] Request details:")
+            print(f"  - Model: {model}")
+            print(f"  - Video URI: {gcs_uri}")
+            print(f"  - Content length: {len(instruction)} chars")
+            
+            resp = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=generate_content_config,
+            )
+            
+            # Add detailed response debugging
+            print(f"[DEBUG] Response details:")
+            print(f"  - Response object type: {type(resp)}")
+            print(f"  - Has candidates: {bool(resp.candidates)}")
+            if hasattr(resp, 'candidates') and resp.candidates:
+                print(f"  - Number of candidates: {len(resp.candidates)}")
+                print(f"  - First candidate finish reason: {resp.candidates[0].finish_reason}")
+            
+            output_text = resp.text or ""
+            
+            if not output_text:
+                print(f"[ERROR] Empty response from model for word: {word}")
+            elif len(output_text) < 10:
+                print(f"[WARNING] Suspiciously short response for word: {word}")
+                
+        except Exception as e:
+            print(f"[ERROR] API error for word {word}:")
+            print(f"  - Error type: {type(e).__name__}")
+            print(f"  - Error message: {str(e)}")
+            print(f"  - Error details: {getattr(e, 'details', 'No details available')}")
+            continue
+
+        test_desc, best_guess, confidence = parse_model_guess(output_text)
 
         if not test_desc:
             print(f"[WARNING] No test description parsed for word: {word}")
@@ -366,32 +466,26 @@ def run_zero_shot_mode(allowed_words, train_descs, client, model):
 
         # Console summary
         print(f"\n=== {word} [test] ===")
-        print(output_text.strip())
+        print(f"Best guess: {best_guess}")
         print("=====================\n")
 
-        # Save the test description (for auditing)
-        append_line(ZERO_SHOT_TEST_DESC_FILE, f"{word}: {test_desc}")
-
-        # Save the prediction row
-        short_desc = (test_desc[:140] + "…") if len(test_desc) > 140 else test_desc
-        append_line(ZERO_SHOT_PRED_FILE, f"{word}\t{best_guess}\t{confidence}\t{short_desc}")
-        
         # Collect results for standardized output
         actual_words.append(word)
         predicted_words.append(best_guess)
 
     return actual_words, predicted_words
 
-def run_semantic_shot_mode(allowed_words, train_descs, client, model):
+def run_semantic_shot_mode(allowed_words, train_descs, client, model, is_test=False):
     """Run the semantic matching logic (original zero_shot_semantic_matching.py logic)"""
-    print("Running in SEMANTIC_SHOT mode (semantic matching logic)")
+    mode = "TEST" if is_test else "TRAIN"
+    print(f"Running in SEMANTIC_SHOT mode for {mode} videos")
     
     # Create embeddings once at startup
     print("[DEBUG] Creating embeddings for train descriptions...")
     word_embeddings = create_embeddings(train_descs)
 
     # Clear/initialize output files
-    print(f"[DEBUG] Initializing output files: {SEMANTIC_TEST_DESC_FILE}, {SEMANTIC_PRED_FILE}")
+
     # Ensure outputs directory exists
     os.makedirs(OUTPUTS_DIR, exist_ok=True)
     open(SEMANTIC_TEST_DESC_FILE, "w", encoding="utf-8").close()
@@ -407,6 +501,124 @@ def run_semantic_shot_mode(allowed_words, train_descs, client, model):
             print("Stopping as requested by user.")
             break
 
+        # Use training videos (this function is for training data)
+        video_filename = f"{word}.MOV"
+        gcs_uri = f"{gcs_prefix_train}{video_filename}"
+        print(f"[DEBUG] Processing word: '{word}' | Training filename: '{video_filename}' | GCS URI: '{gcs_uri}'")
+
+        # Check if local training file exists (for debugging naming issues)
+        local_path = os.path.join(video_dir_train, video_filename)
+        if not os.path.exists(local_path):
+            print(f"[WARNING] Local training video not found: {local_path}")
+
+        generate_content_config = types.GenerateContentConfig(
+            temperature=0.0,      # deterministic
+            top_p=1,
+            seed=0,
+            max_output_tokens=12000,
+            safety_settings=[
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="OFF"),
+            ],
+            thinking_config=types.ThinkingConfig(thinking_budget=-1),
+            media_resolution="MEDIA_RESOLUTION_LOW",
+        )
+        
+        # Step 1: Get initial description
+        try:
+            resp = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(
+                                file_data=types.FileData(
+                                    file_uri=gcs_uri,
+                                    mime_type="video/MOV",
+                                )
+                            ),
+                            types.Part(text=DESCRIPTION_PROMPT),
+                        ],
+                    )
+                ],
+                config=generate_content_config,
+            )
+            
+            initial_desc = resp.text.split("Description:", 1)[-1].strip()
+
+            # Step 2: Get similar descriptions
+            print("\n[DEBUG] Top similar descriptions retrieved:")
+            top_matches = get_top_n_similar(initial_desc, word_embeddings, train_descs, n=20)
+            for matched_word in top_matches.keys():
+                print(f"  - {matched_word}")
+            
+            reference_block = build_reference_block(top_matches, allowed_words)
+            # Compose the full instruction (references + allowed words)
+            instruction = (
+                PROMPT_HEADER_SEMANTIC
+                + "\nREFERENCE DESCRIPTIONS (one per word):\n"
+                + reference_block
+                + f"\nTest description: {initial_desc}"
+            )
+
+            # Step 3: Make final prediction
+            resp = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(text=instruction),
+                        ],
+                    )
+                ],
+                config=generate_content_config,
+            )
+            
+            output_text = resp.text or ""
+            
+            if not output_text:
+                print(f"[ERROR] Empty response from model for word: {word}")
+                continue
+                
+        except Exception as e:
+            print(f"[ERROR] API error for word {word}: {str(e)}")
+            continue
+
+        test_desc, best_guess, confidence = parse_model_guess(output_text)
+        
+        # Keep only the final result summary
+        print(f"\n=== {word} [train] ===")
+        print(f"Best guess: {best_guess}")
+        print("=====================\n")
+
+        # Collect results for standardized output
+        actual_words.append(word)
+        predicted_words.append(best_guess)
+
+    return actual_words, predicted_words
+
+def run_semantic_shot_mode_test(allowed_words, train_descs, client, model):
+    """Run the semantic matching logic for test videos"""
+    print("Running in SEMANTIC_SHOT mode for TEST videos")
+    
+    # Create embeddings once at startup
+    print("[DEBUG] Creating embeddings for train descriptions...")
+    word_embeddings = create_embeddings(train_descs)
+
+    # Collect results for standardized output
+    actual_words = []
+    predicted_words = []
+
+    for word in allowed_words:
+        if stop_flag:
+            print("Stopping as requested by user.")
+            break
+
+        # Use test videos
         test_filename = get_test_filename(word)
         test_gcs_uri = f"{gcs_prefix_test}{test_filename}"
         print(f"[DEBUG] Processing word: '{word}' | Test filename: '{test_filename}' | GCS URI: '{test_gcs_uri}'")
@@ -468,7 +680,7 @@ def run_semantic_shot_mode(allowed_words, train_descs, client, model):
                 + reference_block
                 + f"\nTest description: {initial_desc}"
             )
-            print(f"[DEBUG] Instruction for model:\n{instruction}\n")
+
             # Step 3: Make final prediction
             resp = client.models.generate_content(
                 model=model,
@@ -500,10 +712,6 @@ def run_semantic_shot_mode(allowed_words, train_descs, client, model):
         print(f"Best guess: {best_guess}")
         print("=====================\n")
 
-        # Save results
-        append_line(SEMANTIC_TEST_DESC_FILE, f"{word}: {test_desc}")
-        append_line(SEMANTIC_PRED_FILE, f"{word}\t{best_guess}\t{confidence}\t{initial_desc}")
-        
         # Collect results for standardized output
         actual_words.append(word)
         predicted_words.append(best_guess)
@@ -523,16 +731,13 @@ def main():
     
     # Load vocab and references
     allowed_words = get_vocab_from_train_videos(video_dir_train)
-    print(f"[DEBUG] Loaded allowed_words from {video_dir_train}: {allowed_words}")
     train_descs = load_train_descriptions(train_desc_file)
-    print(f"[DEBUG] Loaded train descriptions from {train_desc_file}: {len(train_descs)} entries")
 
     # Limit words if specified
     if args.num_words and args.num_words < len(allowed_words):
         allowed_words = allowed_words[:args.num_words]
-        print(f"[DEBUG] Limited to {len(allowed_words)} words: {allowed_words}")
 
-    client = genai.Client(vertexai=True, project="737222604798", location="us-central1")
+    client = genai.Client(vertexai=True, project="finetuning-gemini-on-psl", location="us-central1")
     model = "publishers/google/models/gemini-2.5-pro"
 
     # Run based on mode
@@ -546,93 +751,87 @@ def main():
 
 def run_zero_shot_matching(num_words=1, seed: int = 42, out_dir: str = "results"):
     """Wrapper function for main.py integration"""
-    # Set the mode to zero_shot
-    import sys
-    sys.argv = [sys.argv[0], '--mode', 'zero_shot']
-    if num_words:
-        sys.argv.extend(['--num_words', str(num_words)])
+    # Process both training and test data for proper accuracy calculation
     
-    main()
+    # Get vocabulary and references
+    allowed_words = get_vocab_from_train_videos(video_dir_train)
+    train_descs = load_train_descriptions(train_desc_file)
     
-    # Calculate accuracy from the output files
-    try:
-        actual_words = []
-        predicted_words = []
-        
-        # Read predictions file
-        pred_file = "outputs/zero_shot_predictions.txt"
-        if os.path.exists(pred_file):
-            with open(pred_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                if len(lines) > 1:  # Skip header
-                    for line in lines[1:]:  # Skip header line
-                        if line.strip():
-                            parts = line.strip().split('\t')
-                            if len(parts) >= 2:
-                                actual_words.append(parts[0])
-                                predicted_words.append(parts[1])
-        
-        # Calculate accuracy
-        if actual_words and predicted_words and len(actual_words) == len(predicted_words):
-            correct = sum(1 for a, p in zip(actual_words, predicted_words) if a.lower() == p.lower())
-            accuracy = correct / len(actual_words) if actual_words else 0.0
-            
-            return {
-                "method": "zero_shot",
-                "num_words": len(actual_words),
-                "train_accuracy": accuracy,
-                "test_accuracy": accuracy
-            }
-    except Exception as e:
-        print(f"Error calculating accuracy: {e}")
+    # Limit words if specified
+    if num_words and num_words < len(allowed_words):
+        allowed_words = allowed_words[:num_words]
     
-    # Fallback if calculation fails
-    return {"method": "zero_shot", "num_words": num_words, "train_accuracy": 0.0, "test_accuracy": 0.0}
+    client = genai.Client(vertexai=True, project="finetuning-gemini-on-psl", location="us-central1")
+    model = "publishers/google/models/gemini-2.5-pro"
+    
+    # Process training videos
+    print(f"\n{'='*20} Processing Training Videos {'='*20}")
+    train_actual, train_predicted = run_zero_shot_mode(allowed_words, train_descs, client, model)
+    
+    # Process test videos  
+    print(f"\n{'='*20} Processing Test Videos {'='*20}")
+    test_actual, test_predicted = run_zero_shot_mode_test(allowed_words, train_descs, client, model)
+    
+    # Calculate accuracies
+    train_accuracy = 0.0
+    test_accuracy = 0.0
+    
+    if train_actual and train_predicted and len(train_actual) == len(train_predicted):
+        train_correct = sum(1 for a, p in zip(train_actual, train_predicted) if a.lower() == p.lower())
+        train_accuracy = train_correct / len(train_actual)
+    
+    if test_actual and test_predicted and len(test_actual) == len(test_predicted):
+        test_correct = sum(1 for a, p in zip(test_actual, test_predicted) if a.lower() == p.lower())
+        test_accuracy = test_correct / len(test_actual)
+    
+    return {
+        "method": "zero_shot",
+        "num_words": len(allowed_words),
+        "train_accuracy": train_accuracy,
+        "test_accuracy": test_accuracy
+    }
 
 def run_semantic_matching(num_words=1, seed: int = 42, out_dir: str = "results"):
     """Wrapper function for main.py integration"""
-    # Set the mode to semantic_shot
-    import sys
-    sys.argv = [sys.argv[0], '--mode', 'semantic_shot']
-    if num_words:
-        sys.argv.extend(['--num_words', str(num_words)])
+    # Process both training and test data for proper accuracy calculation
     
-    main()
+    # Get vocabulary and references
+    allowed_words = get_vocab_from_train_videos(video_dir_train)
+    train_descs = load_train_descriptions(train_desc_file)
     
-    # Calculate accuracy from the output files
-    try:
-        actual_words = []
-        predicted_words = []
-        
-        # Read predictions file
-        pred_file = "outputs/semantic_predictions.txt"
-        if os.path.exists(pred_file):
-            with open(pred_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                if len(lines) > 1:  # Skip header
-                    for line in lines[1:]:  # Skip header line
-                        if line.strip():
-                            parts = line.strip().split('\t')
-                            if len(parts) >= 2:
-                                actual_words.append(parts[0])
-                                predicted_words.append(parts[1])
-        
-        # Calculate accuracy
-        if actual_words and predicted_words and len(actual_words) == len(predicted_words):
-            correct = sum(1 for a, p in zip(actual_words, predicted_words) if a.lower() == p.lower())
-            accuracy = correct / len(actual_words) if actual_words else 0.0
-            
-            return {
-                "method": "semantic_shot",
-                "num_words": len(actual_words),
-                "train_accuracy": accuracy,
-                "test_accuracy": accuracy
-            }
-    except Exception as e:
-        print(f"Error calculating accuracy: {e}")
+    # Limit words if specified
+    if num_words and num_words < len(allowed_words):
+        allowed_words = allowed_words[:num_words]
     
-    # Fallback if calculation fails
-    return {"method": "semantic_shot", "num_words": num_words, "train_accuracy": 0.0, "test_accuracy": 0.0}
+    client = genai.Client(vertexai=True, project="finetuning-gemini-on-psl", location="us-central1")
+    model = "publishers/google/models/gemini-2.5-pro"
+    
+    # Process training videos
+    print(f"\n{'='*20} Processing Training Videos {'='*20}")
+    train_actual, train_predicted = run_semantic_shot_mode(allowed_words, train_descs, client, model)
+    
+    # Process test videos  
+    print(f"\n{'='*20} Processing Test Videos {'='*20}")
+    test_actual, test_predicted = run_semantic_shot_mode_test(allowed_words, train_descs, client, model)
+    
+    # Calculate accuracies
+    train_accuracy = 0.0
+    test_accuracy = 0.0
+    
+    if train_actual and train_predicted and len(train_actual) == len(train_predicted):
+        train_correct = sum(1 for a, p in zip(train_actual, train_predicted) if a.lower() == p.lower())
+        train_accuracy = train_correct / len(train_actual)
+    
+    if test_actual and test_predicted and len(test_actual) == len(test_predicted):
+        test_correct = sum(1 for a, p in zip(test_actual, test_predicted) if a.lower() == p.lower())
+        test_accuracy = test_correct / len(test_actual)
+    
+    return {
+        "method": "semantic_shot",
+        "num_words": len(allowed_words),
+        "train_accuracy": train_accuracy,
+        "test_accuracy": test_accuracy
+    }
 
 if __name__ == "__main__":
     listener = threading.Thread(target=listen_for_stop, daemon=True)

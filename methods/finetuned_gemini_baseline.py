@@ -313,22 +313,14 @@ def run_finetuned_gemini(num_words=1, seed: int = 42, out_dir: str = "results"):
     print(f"Training Accuracy: {train_accuracy:.4f} ({len(train_predictions)} samples)")
     print(f"Test Accuracy: {test_accuracy:.4f} ({len(test_predictions)} samples)")
     
-    # Save results in standardized format
-    method_dir = os.path.join(out_dir, "finetuned_gemini")
-    os.makedirs(method_dir, exist_ok=True)
-    out_path = os.path.join(method_dir, f"accuracy_seed{seed}_n{num_words}.json")
-    
-    with open(out_path, 'w') as f:
-        json.dump({
-            "method": "finetuned_gemini",
-            "num_words": num_words,
-            "train_accuracy": train_accuracy,
-            "test_accuracy": test_accuracy,
-            "model_name": FINETUNED_MODEL_NAME
-        }, f, indent=2)
-    
-    print(f"Saved results -> {out_path}")
-    return {"train_accuracy": train_accuracy, "test_accuracy": test_accuracy}
+    # Return results for main.py to handle (consistent with other baselines)
+    return {
+        "method": "finetuned_gemini",
+        "num_words": num_words,
+        "train_accuracy": train_accuracy,
+        "test_accuracy": test_accuracy,
+        "model_name": FINETUNED_MODEL_NAME
+    }
 
 def main():
     """Main function to run the baseline evaluation"""

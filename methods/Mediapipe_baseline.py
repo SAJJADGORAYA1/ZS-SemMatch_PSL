@@ -20,12 +20,12 @@ SINGLE_TEST_VIDEO = "massage.mp4"
 CONTINUOUS_TEST_VIDEO = "body massage.mp4"
 MAX_FRAMES = 30
 KEYPOINT_DIM = (33 * 4) + (21 * 3) + (21 * 3) + (468 * 3)  # 1662
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 EPOCHS = 200
 BATCH_SIZE = 2
-MODEL_DIM = 512
+MODEL_DIM = 256  # Reduced from 512
 NUM_HEADS = 4
-NUM_LAYERS = 2
+NUM_LAYERS = 1   # Reduced from 2
 MODEL_PATH = "sign_transformer.pth"
 
 # Continuous recognition parameters
@@ -527,7 +527,7 @@ def run_mediapipe(num_words=1, backend="transformer", seed: int = 42, epochs: in
 
     # Create model
     if backend.lower() == "lstm":
-        model = SignLSTM(input_dim=KEYPOINT_DIM, hidden_dim=MODEL_DIM, num_classes=num_classes).to(DEVICE)
+        model = SignLSTM(input_dim=KEYPOINT_DIM, hidden_dim=128, num_classes=num_classes).to(DEVICE)  # Reduced hidden_dim
     else:
         model = SignTransformer(
             input_dim=KEYPOINT_DIM,
@@ -543,7 +543,7 @@ def run_mediapipe(num_words=1, backend="transformer", seed: int = 42, epochs: in
 
     # Training setup
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)  # Reduced learning rate
     
     # Training loop
     print(f"Training MediaPipe-{backend} model for {epochs} epochs on {num_classes} classes...")

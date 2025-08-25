@@ -3,7 +3,7 @@ import os, random, cv2, torch, torch.nn as nn, torch.optim as optim
 import json, time
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
-from device_utils import get_best_device, to_device, device_info
+from utils.device_utils import get_best_device, to_device, device_info
 from tqdm import tqdm
 
 class VideoISLRDataset(Dataset):

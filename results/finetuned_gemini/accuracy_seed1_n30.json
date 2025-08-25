@@ -1,0 +1,7 @@
+{
+  "method": "finetuned_gemini",
+  "num_words": 30,
+  "train_accuracy": 0.5238095238095238,
+  "test_accuracy": 0.3181818181818182,
+  "model_name": "projects/737222604798/locations/us-central1/endpoints/4480381240326750208"
+}

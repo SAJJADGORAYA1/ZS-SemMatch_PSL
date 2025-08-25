@@ -4,7 +4,7 @@ import random, json, time
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from torchvision.models.video import r3d_18, R3D_18_Weights
-from device_utils import get_best_device, to_device, device_info
+from utils.device_utils import get_best_device, to_device, device_info
 from tqdm import tqdm
 
 class VideoISLR3D(Dataset):

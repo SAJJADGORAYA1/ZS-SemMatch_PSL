@@ -1,0 +1,7 @@
+{
+  "method": "mhi_attention",
+  "num_words": 30,
+  "train_accuracy": 0.7666666666666667,
+  "test_accuracy": 0.03333333333333333,
+  "epochs": 50
+}

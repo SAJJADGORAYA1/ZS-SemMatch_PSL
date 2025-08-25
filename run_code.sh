@@ -3,10 +3,10 @@
 # Define lists for parameters
 seed_list=(1)
 # method_list=(c3d cnn_lstm mhi_baseline mhi_fusion mhi_attention mediapipe mediapipe_transformer mediapipe_lstm c3d_pretrained cnn_lstm_pretrained finetuned_gemini zero_shot semantic_shot)
-method_list=(zero_shot semantic_shot)
+method_list=(zero_shot semantic_shot finetuned_gemini)
 num_words_list=(30)
-epochs_list=(30)
-batch_size_list=(1)
+epochs_list=(50)
+batch_size_list=(4)
 
 # Loop over parameters
 for seed in "${seed_list[@]}"; do
