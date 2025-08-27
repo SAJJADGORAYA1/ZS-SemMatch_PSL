@@ -2,5 +2,5 @@
   "method": "semantic_shot",
   "num_words": 30,
   "train_accuracy": 0.8666666666666667,
-  "test_accuracy": 0.6333333333333333
+  "test_accuracy": 0.7
 }

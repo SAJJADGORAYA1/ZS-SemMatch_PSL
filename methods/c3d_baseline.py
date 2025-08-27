@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from torchvision.models.video import r3d_18, R3D_18_Weights
 from utils.device_utils import get_best_device, to_device, device_info
+from utils.plot_utils import create_confusion_matrix, create_loss_graph
 from tqdm import tqdm
 
 class VideoISLR3D(Dataset):
@@ -116,7 +117,7 @@ def _remap_subset(samples):
     return new_samples, next_idx
 
 
-def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, batch_size: int = 1):
+def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, batch_size: int = 1, confusion=False, loss=False):
     """Run C3D pipeline on all words from Words_train, test on Words_test."""
     train_root = "data/Words_train"
     test_root = "data/Words_test"
@@ -142,6 +143,9 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
     # Training setup
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    
+    # Track losses for plotting
+    epoch_losses = []
     
     # Training loop
     print(f"Training C3D model for {epochs} epochs on {num_classes} classes...")
@@ -177,6 +181,7 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
         # Print epoch summary
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_acc = correct / total if total > 0 else 0.0
+        epoch_losses.append(epoch_loss)
         print(f"Epoch {epoch+1}/{epochs}: Loss={epoch_loss:.4f}, Train Acc={epoch_acc:.3f}")
     
     model.eval()
@@ -224,6 +229,36 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
     print(f"Training Accuracy: {train_acc:.3f} ({train_correct}/{train_total})")
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     print(f"Classes: {num_classes}")
+
+    # Generate plots if requested
+    if confusion or loss:
+        # Collect actual and predicted words for confusion matrix
+        actual_words = []
+        predicted_words = []
+        
+        # Get predictions for confusion matrix
+        model.eval()
+        with torch.no_grad():
+            for x, y in test_loader:
+                x = to_device(x, device)
+                y = to_device(y, device)
+                logits = model(x)
+                pred = logits.argmax(1)
+                
+                # Convert indices to words
+                for i in range(len(y)):
+                    actual_word = test_ds.classes[y[i].item()]
+                    predicted_word = test_ds.classes[pred[i].item()]
+                    actual_words.append(actual_word)
+                    predicted_words.append(predicted_word)
+        
+        # Create confusion matrix if requested
+        if confusion:
+            create_confusion_matrix(actual_words, predicted_words, "c3d")
+        
+        # Create loss graph if requested
+        if loss and epoch_losses:
+            create_loss_graph(epoch_losses, "c3d")
 
     # Return results for main.py to handle
     return {

@@ -6,15 +6,14 @@
 \toprule
 \textbf{Method} & \textbf{Train Acc.} & \textbf{Test Acc.} \\
 \midrule
-CNN+LSTM (Scratch) & 0.40 & 0.03 \\
-3D CNN (R3D-18, Scratch) & 0.90 & 0.03 \\
-MediaPipe Keypoints + Transformer & 0.93 & 0.10 \\
-MediaPipe Keypoints + LSTM & 0.83 & 0.07 \\
-MHI Fusion & 0.53 & 0.00 \\
-MHI Attention & 0.77 & 0.03 \\
-Gemini-LoRA (Finetuned) & 0.52 & 0.32 \\
-Ours (Zero-Shot Matching) & 0.90 & \textbf{0.63} \\
-Ours (Semantic Shot) & 0.87 & \textbf{0.63} \\
+CNN+LSTM (Scratch) & 0.90 & 0.03 \\
+3D CNN (R3D-18, Scratch) & 1.00 & 0.07 \\
+MediaPipe Keypoints + Transformer & 0.97 & 0.13 \\
+MediaPipe Keypoints + LSTM & 1.00 & 0.07 \\
+MHI Fusion & 0.97 & 0.03 \\
+Gemini-LoRA (Finetuned) & 0.52 & 0.36 \\
+Ours (Zero-Shot Matching) & 0.80 & 0.67 \\
+Ours (Semantic Shot) & 0.87 & \textbf{0.70} \\
 \bottomrule
 \end{tabular}
 \end{table}

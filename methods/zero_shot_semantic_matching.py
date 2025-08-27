@@ -11,6 +11,7 @@ import numpy as np
 from dotenv import load_dotenv
 import json
 import argparse
+from utils.plot_utils import create_confusion_matrix
 
 # Load environment variables
 load_dotenv()
@@ -749,7 +750,7 @@ def main():
         method_name = "semantic_shot"
 
 
-def run_zero_shot_matching(num_words=1, seed: int = 42, out_dir: str = "results"):
+def run_zero_shot_matching(num_words=1, seed: int = 42, out_dir: str = "results", confusion=False):
     """Wrapper function for main.py integration"""
     # Process both training and test data for proper accuracy calculation
     
@@ -784,6 +785,12 @@ def run_zero_shot_matching(num_words=1, seed: int = 42, out_dir: str = "results"
         test_correct = sum(1 for a, p in zip(test_actual, test_predicted) if a.lower() == p.lower())
         test_accuracy = test_correct / len(test_actual)
     
+    # Generate confusion matrix if requested
+    if confusion:
+        # Use test data for confusion matrix (more meaningful for zero-shot)
+        if test_actual and test_predicted:
+            create_confusion_matrix(test_actual, test_predicted, "zero_shot")
+    
     return {
         "method": "zero_shot",
         "num_words": len(allowed_words),
@@ -791,7 +798,7 @@ def run_zero_shot_matching(num_words=1, seed: int = 42, out_dir: str = "results"
         "test_accuracy": test_accuracy
     }
 
-def run_semantic_matching(num_words=1, seed: int = 42, out_dir: str = "results"):
+def run_semantic_matching(num_words=1, seed: int = 42, out_dir: str = "results", confusion=False):
     """Wrapper function for main.py integration"""
     # Process both training and test data for proper accuracy calculation
     
@@ -825,6 +832,12 @@ def run_semantic_matching(num_words=1, seed: int = 42, out_dir: str = "results")
     if test_actual and test_predicted and len(test_actual) == len(test_predicted):
         test_correct = sum(1 for a, p in zip(test_actual, test_predicted) if a.lower() == p.lower())
         test_accuracy = test_correct / len(test_actual)
+    
+    # Generate confusion matrix if requested
+    if confusion:
+        # Use test data for confusion matrix (more meaningful for semantic matching)
+        if test_actual and test_predicted:
+            create_confusion_matrix(test_actual, test_predicted, "semantic_shot")
     
     return {
         "method": "semantic_shot",

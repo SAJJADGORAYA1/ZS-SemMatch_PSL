@@ -16,6 +16,7 @@ from typing import List, Tuple, Optional
 import math
 import torch.optim as optim
 from utils.device_utils import get_best_device, to_device, device_info
+from utils.plot_utils import create_confusion_matrix, create_loss_graph
 from tqdm import tqdm
 
 # ========== Configuration ==========
@@ -235,6 +236,9 @@ class I3D(nn.Module):
         if return_features:
             self.features['layer3'] = x
         
+        if return_features:
+            return self.features
+        
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
@@ -244,14 +248,11 @@ class I3D(nn.Module):
 
 class MHIResNet(nn.Module):
     """ResNet-50 based MHI classifier without GAP, keeping all conv blocks."""
-    def __init__(self, num_classes, pretrained=True):
+    def __init__(self, num_classes):
         super().__init__()
         
-        # Load pretrained ResNet-50
-        if pretrained:
-            resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-        else:
-            resnet = models.resnet50(weights=None)
+        # Always use random initialization (no pretrained weights)
+        resnet = models.resnet50(weights=None)
         
         # Remove the final layers (avgpool and fc)
         self.features = nn.Sequential(*list(resnet.children())[:-2])
@@ -298,47 +299,65 @@ class MHIResNet(nn.Module):
         return x
 
 class MHIAttentionModel(nn.Module):
-    """MHI-Attention variant: MHI provides attention map for I3D features."""
-    def __init__(self, num_classes, use_pretrained=True):
+    """Simplified MHI-Attention"""
+    def __init__(self, num_classes):
         super().__init__()
+        # Use a much smaller I3D backbone
         self.i3d = I3D(num_classes)
-        self.mhi_resnet = MHIResNet(num_classes, pretrained=use_pretrained)
         
-        # Attention mechanism - dynamically determine input channels
-        self.attention_proj = None  # Will be set dynamically
+        # Simple MHI feature extractor (just a few conv layers)
+        self.mhi_encoder = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3),  # 32 channels
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 64 channels
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((7, 7))  # Fixed size output
+        )
+        
+        # Simple attention mechanism
+        self.attention = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=1),  # Reduce channels
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 1, kernel_size=1),   # Generate attention map
+            nn.Sigmoid()  # Values between 0 and 1
+        )
+        
+        # Simple classifier for attended features
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 256),  # I3D features are 512
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(256, num_classes)
+        )
         
     def forward(self, video, mhi):
-        # Get MHI features for attention
-        mhi_features = self.mhi_resnet(mhi, return_features=True)
+        # Force I3D to compute full forward pass (so weights get trained)
+        _ = self.i3d(video)  
         
-        # Extract attention map from conv3 (best performing layer per paper)
-        attention_features = self.mhi_resnet.intermediate_features['conv3']
-        
-        # Dynamically create attention projection if not exists
-        if self.attention_proj is None:
-            in_channels = attention_features.size(1)
-            self.attention_proj = nn.Conv2d(in_channels, 1, kernel_size=1).to(attention_features.device)
-        
-        # Generate attention map: channel-wise global average, softmax, min-max normalize
-        attention_map = self.attention_proj(attention_features)  # [B, 1, H, W]
-        attention_map = F.softmax(attention_map.view(attention_map.size(0), -1), dim=1)
-        attention_map = attention_map.view_as(attention_map)
-        
-        # Min-max normalization
-        attention_map = (attention_map - attention_map.min()) / (attention_map.max() - attention_map.min() + 1e-8)
-        
-        # For now, use a simplified approach: just return the I3D prediction
-        # The attention map is computed but not yet fully integrated
-        # This ensures the model works while we can improve the attention mechanism later
-        
-        return self.i3d(video)
+        # Get intermediate features
+        feats = self.i3d(video, return_features=True)
+        spatial_features = feats['layer3'].mean(dim=2)  # [B, 512, H, W]
+
+        # Attention
+        mhi_features = self.mhi_encoder(mhi)  
+        attn = self.attention(mhi_features)
+        attn = F.interpolate(attn, size=spatial_features.shape[-2:], mode='bilinear', align_corners=False)
+
+        # Residual gating
+        attended = spatial_features * (1 + attn)
+
+        # Pool + classify
+        pooled = F.adaptive_avg_pool2d(attended, (1, 1)).flatten(1)
+        return self.classifier(pooled)
+
 
 class MHIFusionModel(nn.Module):
     """Late-fusion variant: combine logits from I3D and MHI-ResNet."""
-    def __init__(self, num_classes, fusion_weights=FUSION_WEIGHTS, use_pretrained=True):
+    def __init__(self, num_classes, fusion_weights=FUSION_WEIGHTS):
         super().__init__()
         self.i3d = I3D(num_classes)
-        self.mhi_resnet = MHIResNet(num_classes, pretrained=use_pretrained)
+        self.mhi_resnet = MHIResNet(num_classes)
         self.fusion_weights = fusion_weights
         
     def forward(self, video, mhi):
@@ -366,7 +385,7 @@ def _remap_subset(samples):
     return new_samples, next_idx
 
 # ========== Main Function ==========
-def run_mhi(num_words=1, mode="baseline", seed: int = 42, epochs: int = 20, batch_size: int = 1, use_pretrained=True):
+def run_mhi(num_words=1, mode="baseline", seed: int = 42, epochs: int = 20, batch_size: int = 1, confusion=False, loss=False):
     """Run MHI baseline with specified mode: attention, fusion, or baseline (plain I3D)."""
     train_root = "data/Words_train"
     test_root = "data/Words_test"
@@ -410,15 +429,18 @@ def run_mhi(num_words=1, mode="baseline", seed: int = 42, epochs: int = 20, batc
     
     # Create model
     if mode == "attention":
-        model = MHIAttentionModel(num_classes, use_pretrained=use_pretrained).to(device)
+        model = MHIAttentionModel(num_classes).to(device)
     elif mode == "fusion":
-        model = MHIFusionModel(num_classes, use_pretrained=use_pretrained).to(device)
+        model = MHIFusionModel(num_classes).to(device)
     else:  # baseline
         model = I3D(num_classes).to(device)
 
     # Training setup
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)  # Higher learning rate for faster overfitting
+    
+    # Track losses for plotting
+    epoch_losses = []
     
     # Training loop
     print(f"Training MHI-{mode} model for {epochs} epochs on {num_classes} classes...")
@@ -460,6 +482,7 @@ def run_mhi(num_words=1, mode="baseline", seed: int = 42, epochs: int = 20, batc
         # Print epoch summary
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_acc = correct / total if total > 0 else 0.0
+        epoch_losses.append(epoch_loss)
         print(f"Epoch {epoch+1}/{epochs}: Loss={epoch_loss:.4f}, Train Acc={epoch_acc:.3f}")
     
     model.eval()
@@ -509,6 +532,42 @@ def run_mhi(num_words=1, mode="baseline", seed: int = 42, epochs: int = 20, batc
     print(f"Training Accuracy: {train_acc:.3f} ({train_correct}/{train_total})")
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     print(f"Classes: {num_classes}")
+
+    # Generate plots if requested
+    if confusion or loss:
+        # Collect actual and predicted words for confusion matrix
+        actual_words = []
+        predicted_words = []
+        
+        # Get predictions for confusion matrix
+        model.eval()
+        with torch.no_grad():
+            for video, mhi, y in test_loader:
+                video = to_device(video, device)
+                mhi = to_device(mhi, device)
+                y = to_device(torch.tensor(y), device)
+                
+                if mode == "baseline":
+                    logits = model(video)
+                else:
+                    logits = model(video, mhi)
+                
+                pred = logits.argmax(1)
+                
+                # Convert indices to words
+                for i in range(len(y)):
+                    actual_word = test_dataset.classes[y[i].item()]
+                    predicted_word = test_dataset.classes[pred[i].item()]
+                    actual_words.append(actual_word)
+                    predicted_words.append(predicted_word)
+        
+        # Create confusion matrix if requested
+        if confusion:
+            create_confusion_matrix(actual_words, predicted_words, method_name)
+        
+        # Create loss graph if requested
+        if loss and epoch_losses:
+            create_loss_graph(epoch_losses, method_name)
 
     # Return results for main.py to handle
     return {

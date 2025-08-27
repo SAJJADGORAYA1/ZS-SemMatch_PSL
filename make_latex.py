@@ -12,7 +12,6 @@ methods = [
     ("mediapipe_transformer", "MediaPipe Keypoints + Transformer"),
     ("mediapipe_lstm", "MediaPipe Keypoints + LSTM"),
     ("mhi_fusion", "MHI Fusion"),
-    ("mhi_attention", "MHI Attention"),
     ("finetuned_gemini", "Gemini-LoRA (Finetuned)"),
     ("zero_shot", "Ours (Zero-Shot Matching)"),
     ("semantic_shot", "Ours (Semantic Shot)"),

@@ -1,7 +1,7 @@
 {
   "method": "c3d",
   "num_words": 30,
-  "train_accuracy": 0.9,
-  "test_accuracy": 0.03333333333333333,
-  "epochs": 50
+  "train_accuracy": 1.0,
+  "test_accuracy": 0.06666666666666667,
+  "epochs": 100
 }

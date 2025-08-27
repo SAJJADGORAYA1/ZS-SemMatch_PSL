@@ -36,7 +36,10 @@ def main():
     parser.add_argument('--epochs', type=int, default=20, help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
     parser.add_argument('--out_dir', type=str, default='results', help='Output directory')
-    parser.add_argument('--no_pretrained', action='store_true', help='Disable pretrained weights for C3D')
+    parser.add_argument('--no_pretrained', action='store_true', help='Disable pretrained weights for C3D and CNN+LSTM')
+    parser.add_argument('--confusion', action='store_true', help='Generate confusion matrix')
+    parser.add_argument('--loss', action='store_true', help='Generate loss graphs')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode for MediaPipe methods')
     
     args = parser.parse_args()
     
@@ -48,29 +51,27 @@ def main():
     
     # Run the selected method
     if args.method == 'c3d':
-        results = run_c3d(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=False)
+        results = run_c3d(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=False, confusion=args.confusion, loss=args.loss)
     elif args.method == 'c3d_pretrained':
-        results = run_c3d(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=True)
+        results = run_c3d(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=True, confusion=args.confusion, loss=args.loss)
     elif args.method == 'cnn_lstm':
-        results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=False)
+        results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=False, confusion=args.confusion, loss=args.loss)
     elif args.method == 'cnn_lstm_pretrained':
-        results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=True)
-    # Removed plain mediapipe option - only transformer and lstm backends available
+        results = run_cnn_lstm(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=True, confusion=args.confusion, loss=args.loss)
     elif args.method == 'mediapipe_transformer':
-        results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='transformer')
+        results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='transformer', confusion=args.confusion, loss=args.loss, debug=args.debug)
     elif args.method == 'mediapipe_lstm':
-        results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='lstm')
-    # Removed plain mhi_baseline option - only fusion and attention variants available
+        results = run_mediapipe(num_words=args.num_words, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, backend='lstm', confusion=args.confusion, loss=args.loss, debug=args.debug)
     elif args.method == 'mhi_fusion':
-        results = run_mhi(num_words=args.num_words, mode='fusion', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=not args.no_pretrained)
+        results = run_mhi(num_words=args.num_words, mode='fusion', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, confusion=args.confusion, loss=args.loss)
     elif args.method == 'mhi_attention':
-        results = run_mhi(num_words=args.num_words, mode='attention', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, use_pretrained=not args.no_pretrained)
+        results = run_mhi(num_words=args.num_words, mode='attention', seed=args.seed, epochs=args.epochs, batch_size=args.batch_size, confusion=args.confusion, loss=args.loss)
     elif args.method == 'finetuned_gemini':
-        results = run_finetuned_gemini(num_words=args.num_words, seed=args.seed, out_dir=args.out_dir)
+        results = run_finetuned_gemini(num_words=args.num_words, seed=args.seed, out_dir=args.out_dir, confusion=args.confusion)
     elif args.method == 'zero_shot':
-        results = run_zero_shot_matching(num_words=args.num_words, seed=args.seed)
+        results = run_zero_shot_matching(num_words=args.num_words, seed=args.seed, confusion=args.confusion)
     elif args.method == 'semantic_shot':
-        results = run_semantic_matching(num_words=args.num_words, seed=args.seed)
+        results = run_semantic_matching(num_words=args.num_words, seed=args.seed, confusion=args.confusion)
     else:
         print(f"Unknown method: {args.method}")
         return

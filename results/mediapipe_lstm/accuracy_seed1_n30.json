@@ -1,7 +1,6 @@
 {
   "method": "mediapipe_lstm",
   "num_words": 30,
-  "train_accuracy": 0.8333333333333334,
-  "test_accuracy": 0.06666666666666667,
-  "epochs": 50
+  "train_accuracy": 1.0,
+  "test_accuracy": 0.06666666666666667
 }

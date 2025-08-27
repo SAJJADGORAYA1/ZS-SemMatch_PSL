@@ -1,6 +1,6 @@
 {
   "method": "zero_shot",
   "num_words": 30,
-  "train_accuracy": 0.9,
-  "test_accuracy": 0.6333333333333333
+  "train_accuracy": 0.8,
+  "test_accuracy": 0.6666666666666666
 }

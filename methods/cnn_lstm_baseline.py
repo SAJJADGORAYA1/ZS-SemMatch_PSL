@@ -4,6 +4,7 @@ import json, time
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 from utils.device_utils import get_best_device, to_device, device_info
+from utils.plot_utils import create_confusion_matrix, create_loss_graph
 from tqdm import tqdm
 
 class VideoISLRDataset(Dataset):
@@ -76,25 +77,24 @@ class InceptionFeatureExtractor(nn.Module):
             m = models.inception_v3(weights=models.Inception_V3_Weights.IMAGENET1K_V1, aux_logits=True)
         else:
             m = models.inception_v3(weights=None, aux_logits=True)
-        # keep everything up to the final pooling (2048-d)
+        # Use only early layers to reduce memory usage
+        # Stop at Mixed_5b instead of going all the way to Mixed_7c
         self.backbone = nn.Sequential(
             m.Conv2d_1a_3x3, m.Conv2d_2a_3x3, m.Conv2d_2b_3x3,
             nn.MaxPool2d(3, stride=2),
             m.Conv2d_3b_1x1, m.Conv2d_4a_3x3,
             nn.MaxPool2d(3, stride=2),
-            m.Mixed_5b, m.Mixed_5c, m.Mixed_5d,
-            m.Mixed_6a, m.Mixed_6b, m.Mixed_6c, m.Mixed_6d, m.Mixed_6e,
-            m.Mixed_7a, m.Mixed_7b, m.Mixed_7c,
-            nn.AdaptiveAvgPool2d((1,1))
+            m.Mixed_5b,  # Stop here instead of going deeper
+            nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling to reduce spatial dimensions
         )
-        self.out_dim = 2048
+        self.out_dim = 256  # Reduced from 2048 to 256
 
     def forward(self, x):                   # x: [B,3,299,299]
-        f = self.backbone(x)                # [B,2048,1,1]
-        return torch.flatten(f, 1)          # [B,2048]
+        f = self.backbone(x)                # [B,256,1,1]
+        return torch.flatten(f, 1)          # [B,256]
 
 class CNNLSTM(nn.Module):
-    def __init__(self, feat_dim=2048, hidden=512, num_classes=10, use_pretrained=True):
+    def __init__(self, feat_dim=256, hidden=256, num_classes=10, use_pretrained=True):
         super().__init__()
         self.feat = InceptionFeatureExtractor(use_pretrained=use_pretrained)
         self.lstm = nn.LSTM(feat_dim, hidden, num_layers=1, batch_first=True)
@@ -103,8 +103,7 @@ class CNNLSTM(nn.Module):
     def forward(self, clip):                # clip: [B,T,3,299,299]
         B,T,_,_,_ = clip.shape
         x = clip.view(B*T, 3, 299, 299)
-        with torch.no_grad():               # freeze CNN for a quick baseline
-            f = self.feat(x)                # [B*T,2048]
+        f = self.feat(x)                    # [B*T,256] - removed torch.no_grad() to make backbone trainable
         f = f.view(B, T, -1)
         out, _ = self.lstm(f)               # [B,T,H]
         logits = self.head(out[:, -1])      # last timestep
@@ -123,7 +122,7 @@ def _remap_subset(samples):
     return remapped, next_id
 
 
-def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int = 1, use_pretrained=True):
+def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int = 1, use_pretrained=True, confusion=False, loss=False):
     """Run CNN-LSTM pipeline on all words from Words_train, test on Words_test."""
     train_root = "data/Words_train"
     test_root = "data/Words_test"
@@ -149,6 +148,9 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
     # Training setup
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    
+    # Track losses for plotting
+    epoch_losses = []
     
     # Training loop
     print(f"Training CNN-LSTM model for {epochs} epochs on {num_classes} classes...")
@@ -184,6 +186,7 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
         # Print epoch summary
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_acc = correct / total if total > 0 else 0.0
+        epoch_losses.append(epoch_loss)
         print(f"Epoch {epoch+1}/{epochs}: Loss={epoch_loss:.4f}, Train Acc={epoch_acc:.3f}")
     
     model.eval()
@@ -227,6 +230,36 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
     print(f"Training Accuracy: {train_acc:.3f} ({train_correct}/{train_total})")
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     print(f"Classes: {num_classes}")
+
+    # Generate plots if requested
+    if confusion or loss:
+        # Collect actual and predicted words for confusion matrix
+        actual_words = []
+        predicted_words = []
+        
+        # Get predictions for confusion matrix
+        model.eval()
+        with torch.no_grad():
+            for clips, y in test_loader:
+                clips = to_device(clips, device)
+                y = to_device(torch.tensor(y), device)
+                logits = model(clips)
+                pred = logits.argmax(1)
+                
+                # Convert indices to words
+                for i in range(len(y)):
+                    actual_word = test_ds.classes[y[i].item()]
+                    predicted_word = test_ds.classes[pred[i].item()]
+                    actual_words.append(actual_word)
+                    predicted_words.append(predicted_word)
+        
+        # Create confusion matrix if requested
+        if confusion:
+            create_confusion_matrix(actual_words, predicted_words, "cnn_lstm")
+        
+        # Create loss graph if requested
+        if loss and epoch_losses:
+            create_loss_graph(epoch_losses, "cnn_lstm")
 
     # Return results for main.py to handle
     return {

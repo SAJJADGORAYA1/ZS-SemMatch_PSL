@@ -10,6 +10,7 @@ import random
 from typing import Dict, List, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
+from utils.plot_utils import create_confusion_matrix
 
 # Load environment variables
 load_dotenv()
@@ -258,7 +259,7 @@ def process_videos(video_dir: str, vocabulary: List[str], client, model_name: st
     
     return predictions
 
-def run_finetuned_gemini(num_words=1, seed: int = 42, out_dir: str = "results"):
+def run_finetuned_gemini(num_words=1, seed: int = 42, out_dir: str = "results", confusion=False):
     """Run finetuned Gemini baseline on PSL video classification."""
     print("=" * 60)
     print("Finetuned Gemini Baseline for PSL Video Classification")
@@ -312,6 +313,14 @@ def run_finetuned_gemini(num_words=1, seed: int = 42, out_dir: str = "results"):
     print(f"Seed: {seed}")
     print(f"Training Accuracy: {train_accuracy:.4f} ({len(train_predictions)} samples)")
     print(f"Test Accuracy: {test_accuracy:.4f} ({len(test_predictions)} samples)")
+    
+    # Generate confusion matrix if requested
+    if confusion:
+        # Use test data for confusion matrix (more meaningful for evaluation)
+        if test_predictions:
+            actual_words = [pred[0] for pred in test_predictions]
+            predicted_words = [pred[1] for pred in test_predictions]
+            create_confusion_matrix(actual_words, predicted_words, "finetuned_gemini")
     
     # Return results for main.py to handle (consistent with other baselines)
     return {
