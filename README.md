@@ -46,20 +46,30 @@ python main.py --method=zero_shot --num_words=30 --seed=42
 python main.py --method=semantic_shot --num_words=30 --seed=42
 ```
 
-#### Method 2: Using Vertex AI Studio
-1. **Open Vertex AI Studio** in your Google Cloud Console
-2. **Navigate to Model Garden** and select Gemini 2.5 Pro
-3. **Upload PSL videos** to Cloud Storage
-4. **Use our prompt templates** from the code for consistent descriptions
-5. **Run semantic matching** using the generated descriptions
+#### Method 2: Batch Processing with Scripts
+Use the provided batch scripts to run multiple methods and configurations:
 
-#### Method 3: Batch Processing
+**Windows (run_code.bat):**
+```batch
+# Edit the script to configure your experiment
+set method_list=zero_shot semantic_shot cnn_lstm c3d mediapipe_transformer
+set num_words_list=1 5 10 30
+set seed_list=1 42
+
+# Run the script
+.\run_code.bat
+```
+
+**macOS/Linux (run_code.sh):**
 ```bash
-# Run multiple configurations
-python main.py --method=zero_shot --num_words=1 --seed=1
-python main.py --method=zero_shot --num_words=5 --seed=1
-python main.py --method=zero_shot --num_words=10 --seed=1
-python main.py --method=zero_shot --num_words=30 --seed=1
+# Edit the script to configure your experiment
+method_list=(zero_shot semantic_shot cnn_lstm c3d mediapipe_transformer)
+num_words_list=(1 5 10 30)
+seed_list=(1 42)
+
+# Make executable and run
+chmod +x run_code.sh
+./run_code.sh
 ```
 
 ### Running Baseline Methods
