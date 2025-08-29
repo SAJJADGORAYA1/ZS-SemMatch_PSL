@@ -1,4 +1,14 @@
-# pip install torch torchvision opencv-python
+"""
+CNN-LSTM Baseline for PSL Sign Language Recognition
+
+This is a baseline method using CNN-LSTM architecture for video classification.
+It is used for comparing our main method (zero-shot semantic matching) with traditional 
+deep learning approaches.
+
+Method: Extracts frame-level features using InceptionV3 CNN, then processes temporal
+sequences with LSTM for sign classification.
+"""
+
 import os, random, cv2, torch, torch.nn as nn, torch.optim as optim
 import json, time
 from torch.utils.data import Dataset, DataLoader
@@ -9,12 +19,11 @@ from tqdm import tqdm
 
 class VideoISLRDataset(Dataset):
     def __init__(self, root, clip_len=24, size=299):
-        self.samples = []  # (video_path, class_idx)
+        self.samples = []
         self.classes = []
         self.class_to_idx = {}
 
         entries = sorted(os.listdir(root))
-        # Nested layout support
         for c in [d for d in entries if os.path.isdir(os.path.join(root, d))]:
             self.class_to_idx.setdefault(c, len(self.classes))
             if c not in self.classes:
@@ -24,7 +33,6 @@ class VideoISLRDataset(Dataset):
                 if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
                     self.samples.append((os.path.join(cdir, f), self.class_to_idx[c]))
 
-        # Flat layout support
         for f in entries:
             fpath = os.path.join(root, f)
             if os.path.isfile(fpath) and f.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
@@ -55,7 +63,6 @@ class VideoISLRDataset(Dataset):
     def _sample_indices(self, n):
         if n <= self.clip_len:
             idx = list(range(n))
-            # loop last frame if short
             idx += [n-1]*(self.clip_len-n)
             return idx
         step = n / self.clip_len
@@ -65,7 +72,7 @@ class VideoISLRDataset(Dataset):
         vp, y = self.samples[i]
         frames = self._read_frames(vp)
         idxs = self._sample_indices(len(frames))
-        clip = torch.stack([self.t(frames[j]) for j in idxs], dim=0)  # [T,3,H,W]
+        clip = torch.stack([self.t(frames[j]) for j in idxs], dim=0)
         return clip, y
 
     def __len__(self): return len(self.samples)
@@ -77,21 +84,19 @@ class InceptionFeatureExtractor(nn.Module):
             m = models.inception_v3(weights=models.Inception_V3_Weights.IMAGENET1K_V1, aux_logits=True)
         else:
             m = models.inception_v3(weights=None, aux_logits=True)
-        # Use only early layers to reduce memory usage
-        # Stop at Mixed_5b instead of going all the way to Mixed_7c
         self.backbone = nn.Sequential(
             m.Conv2d_1a_3x3, m.Conv2d_2a_3x3, m.Conv2d_2b_3x3,
             nn.MaxPool2d(3, stride=2),
             m.Conv2d_3b_1x1, m.Conv2d_4a_3x3,
             nn.MaxPool2d(3, stride=2),
-            m.Mixed_5b,  # Stop here instead of going deeper
-            nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling to reduce spatial dimensions
+            m.Mixed_5b,
+            nn.AdaptiveAvgPool2d((1, 1))
         )
-        self.out_dim = 256  # Reduced from 2048 to 256
+        self.out_dim = 256
 
-    def forward(self, x):                   # x: [B,3,299,299]
-        f = self.backbone(x)                # [B,256,1,1]
-        return torch.flatten(f, 1)          # [B,256]
+    def forward(self, x):
+        f = self.backbone(x)
+        return torch.flatten(f, 1)
 
 class CNNLSTM(nn.Module):
     def __init__(self, feat_dim=256, hidden=256, num_classes=10, use_pretrained=True):
@@ -100,15 +105,14 @@ class CNNLSTM(nn.Module):
         self.lstm = nn.LSTM(feat_dim, hidden, num_layers=1, batch_first=True)
         self.head = nn.Linear(hidden, num_classes)
 
-    def forward(self, clip):                # clip: [B,T,3,299,299]
+    def forward(self, clip):
         B,T,_,_,_ = clip.shape
         x = clip.view(B*T, 3, 299, 299)
-        f = self.feat(x)                    # [B*T,256] - removed torch.no_grad() to make backbone trainable
+        f = self.feat(x)
         f = f.view(B, T, -1)
-        out, _ = self.lstm(f)               # [B,T,H]
-        logits = self.head(out[:, -1])      # last timestep
+        out, _ = self.lstm(f)
+        logits = self.head(out[:, -1])
         return logits
-
 
 def _remap_subset(samples):
     mapping = {}
@@ -121,13 +125,10 @@ def _remap_subset(samples):
         remapped.append((path, mapping[y]))
     return remapped, next_id
 
-
 def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int = 1, use_pretrained=True, confusion=False, loss=False):
-    """Run CNN-LSTM pipeline on all words from Words_train, test on Words_test."""
     train_root = "data/Words_train"
     test_root = "data/Words_test"
     
-    # Load training dataset - ALL words from Words_train
     train_ds = VideoISLRDataset(train_root, clip_len=24, size=299)
     if len(train_ds) == 0:
         print(f"No videos found in {train_root}")
@@ -136,23 +137,18 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
     print(f"Training dataset: {len(train_ds)} videos, {len(train_ds.classes)} classes")
     print(f"Classes: {train_ds.classes}")
     
-    # Create training loader with ALL data
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
     num_classes = len(train_ds.classes)
 
-    # Get best available device (CUDA > MPS > CPU)
     device = get_best_device(method_name="cnn_lstm")
     device_info()
     model = CNNLSTM(num_classes=num_classes, use_pretrained=use_pretrained).to(device)
     
-    # Training setup
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    # Track losses for plotting
     epoch_losses = []
     
-    # Training loop
     print(f"Training CNN-LSTM model for {epochs} epochs on {num_classes} classes...")
     for epoch in range(epochs):
         model.train()
@@ -160,7 +156,6 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
         correct = 0
         total = 0
         
-        # Progress bar for each epoch
         with tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}") as pbar:
             for clips, y in pbar:
                 clips = to_device(clips, device)
@@ -177,13 +172,11 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
                 correct += (pred == y).sum().item()
                 total += y.size(0)
                 
-                # Update progress bar with loss
                 pbar.set_postfix({
                     'Loss': f'{total_loss/total:.4f}',
                     'Acc': f'{correct/total:.3f}' if total > 0 else '0.000'
                 })
         
-        # Print epoch summary
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_acc = correct / total if total > 0 else 0.0
         epoch_losses.append(epoch_loss)
@@ -191,7 +184,6 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
     
     model.eval()
     
-    # Test on training set
     train_correct=0; train_total=0
     with torch.no_grad():
         for clips, y in train_loader:
@@ -201,14 +193,12 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
             train_correct += (pred==y).sum().item(); train_total += y.size(0)
     train_acc = (train_correct/train_total) if train_total>0 else 0.0
     
-    # Test on test set (different videos, same classes)
     print("Evaluating on test set...")
     test_ds = VideoISLRDataset(test_root, clip_len=24, size=299)
     if len(test_ds) == 0:
         print(f"No videos found in {test_root}")
         return
     
-    # Important: Use the same class mapping as training
     test_ds.class_to_idx = train_ds.class_to_idx
     test_ds.classes = train_ds.classes
     
@@ -231,13 +221,10 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     print(f"Classes: {num_classes}")
 
-    # Generate plots if requested
     if confusion or loss:
-        # Collect actual and predicted words for confusion matrix
         actual_words = []
         predicted_words = []
         
-        # Get predictions for confusion matrix
         model.eval()
         with torch.no_grad():
             for clips, y in test_loader:
@@ -246,25 +233,21 @@ def run_cnn_lstm(num_words=1, seed: int = 42, epochs: int = 20, batch_size: int 
                 logits = model(clips)
                 pred = logits.argmax(1)
                 
-                # Convert indices to words
                 for i in range(len(y)):
                     actual_word = test_ds.classes[y[i].item()]
                     predicted_word = test_ds.classes[pred[i].item()]
                     actual_words.append(actual_word)
                     predicted_words.append(predicted_word)
         
-        # Create confusion matrix if requested
         if confusion:
             create_confusion_matrix(actual_words, predicted_words, "cnn_lstm")
         
-        # Create loss graph if requested
         if loss and epoch_losses:
             create_loss_graph(epoch_losses, "cnn_lstm")
 
-    # Return results for main.py to handle
     return {
         "method": "cnn_lstm",
-        "num_words": num_classes,  # Use actual number of classes
+        "num_words": num_classes,
         "train_accuracy": train_acc,
         "test_accuracy": test_acc,
         "epochs": epochs

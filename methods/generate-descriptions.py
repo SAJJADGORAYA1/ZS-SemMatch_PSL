@@ -1,3 +1,13 @@
+"""
+Description Generation for PSL Sign Language Recognition
+
+This utility generates standardized descriptions of PSL videos for use in our
+zero-shot semantic matching method. It is not a baseline but a preprocessing step.
+
+Method: Uses Gemini to analyze PSL videos and generate consistent, structured
+descriptions that can be used as reference for semantic matching.
+"""
+
 from google import genai
 from google.genai import types
 import os
@@ -6,14 +16,12 @@ import time
 import signal
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 PROJECT_ID = os.getenv("PROJECT_ID")
 LOCATION = os.getenv("LOCATION")
 FINETUNED_MODEL_NAME = os.getenv("FINETUNED_MODEL_NAME")
 
-# Ensure GOOGLE_APPLICATION_CREDENTIALS is set
 if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
     default_adc = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
     if os.path.exists(default_adc):
@@ -59,7 +67,6 @@ Examples:
 Counterexample to avoid (hallucination): do not mention a circular motion unless it is clearly seen in the clip you watched.
 """
 
-# Collect all possible words (labels) from train
 all_words = [
     os.path.splitext(f)[0]
     for f in os.listdir(video_dir_train)
@@ -67,7 +74,6 @@ all_words = [
 ]
 
 def get_test_filename(word):
-    # Capitalize first letter for test set
     return word[0].upper() + word[1:] + ".MOV"
 
 stop_flag = False
@@ -80,7 +86,6 @@ def save_description(word, split, description):
 def generate_for_all_videos():
     global stop_flag
 
-    # Clear the file at the start of each run
     with open(SAVE_FILENAME, "w", encoding="utf-8") as f:
         pass
 
@@ -108,7 +113,6 @@ def generate_for_all_videos():
                 print("Stopping as requested by user.")
                 break
             
-            # Use GCS URI like zero_shot_semantic_matching.py does
             train_gcs_uri = f"{gcs_prefix_train}{train_filename}"
             print(f"Using GCS URI: {train_gcs_uri}")
             

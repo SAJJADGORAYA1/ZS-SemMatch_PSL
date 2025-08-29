@@ -1,3 +1,14 @@
+"""
+MediaPipe Baseline for PSL Sign Language Recognition
+
+This is a baseline method using MediaPipe keypoint extraction with Transformer and LSTM backends.
+It is used for comparing our main method (zero-shot semantic matching) with traditional 
+computer vision approaches.
+
+Method: Extracts pose, hand, and face keypoints using MediaPipe, then processes them with
+either a Transformer encoder or LSTM for classification.
+"""
+
 import os
 import cv2
 import torch
@@ -13,11 +24,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ========== Configuration ==========
 VIDEO_DIR = "data/Words_train"
 SINGLE_TEST_VIDEO = "massage.mp4"
 MAX_FRAMES = 30
-KEYPOINT_DIM = (33 * 4) + (21 * 3) + (21 * 3) + (468 * 3)  # 1662
+KEYPOINT_DIM = (33 * 4) + (21 * 3) + (21 * 3) + (468 * 3)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 EPOCHS = 200
 BATCH_SIZE = 2
@@ -26,9 +36,6 @@ NUM_HEADS = 4
 NUM_LAYERS = 1
 MODEL_PATH = "sign_transformer.pth"
 
-"""MediaPipe baseline for PSL signs with Transformer and LSTM options."""
-
-# ========== MediaPipe Keypoint Extractor ==========
 class KeypointExtractor:
     def __init__(self):
         self.holistic = None
@@ -73,7 +80,6 @@ class KeypointExtractor:
         keypoints = pose + left_hand + right_hand + face
         return np.array(keypoints, dtype=np.float32)
 
-# ========== Dataset ==========
 class SignDataset(Dataset):
     def __init__(self, video_dir):
         self.video_paths = []
@@ -116,14 +122,13 @@ class SignDataset(Dataset):
         label = self.encoded_labels[idx]
         return torch.tensor(frames, dtype=torch.float32), torch.tensor(label, dtype=torch.long)
 
-# ========== Transformer & LSTM Models ==========
 class SignTransformer(nn.Module):
     def __init__(self, input_dim, model_dim, num_classes,
                  h=4, d_k=128, d_v=128, d_ff=2048,
                  n_layers=2, dropout_rate=0.1, max_seq_len=MAX_FRAMES):
         super().__init__()
         self.src_proj = nn.Linear(input_dim, model_dim)
-        self.dummy_encoder = nn.Parameter(torch.randn(1, MAX_FRAMES, model_dim))
+        self.positional_embedding = nn.Parameter(torch.randn(1, MAX_FRAMES, model_dim))
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=model_dim, nhead=h, dim_feedforward=d_ff,
             dropout=dropout_rate, batch_first=True
@@ -133,7 +138,7 @@ class SignTransformer(nn.Module):
 
     def forward(self, src):
         x = self.src_proj(src)
-        encoder_output = self.dummy_encoder.repeat(x.size(0), 1, 1)
+        encoder_output = self.positional_embedding.repeat(x.size(0), 1, 1)
         encoded = self.encoder(x + encoder_output)
         pooled = encoded.mean(dim=1)
         return self.classifier(pooled)
@@ -149,7 +154,6 @@ class SignLSTM(nn.Module):
         out, _ = self.lstm(x)
         return self.classifier(out[:, -1])
 
-# ========== Train ==========
 def train_model(model, dataloader, optimizer, criterion, epochs):
     model.train()
     for epoch in range(epochs):
@@ -164,7 +168,6 @@ def train_model(model, dataloader, optimizer, criterion, epochs):
             total_loss += loss.item()
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(dataloader):.4f}")
 
-# ========== Evaluation ==========
 def evaluate_model(model, dataloader):
     model.eval()
     all_preds, all_labels = [], []
@@ -190,7 +193,6 @@ def plot_confusion_matrix(true_labels, pred_labels, classes, title='Confusion Ma
     print("\nClassification Report:")
     print(classification_report(true_labels, pred_labels, target_names=classes))
 
-# ========== Test Functions ==========
 def test_single_video(model, test_path, label_encoder):
     extractor = KeypointExtractor()
     cap = cv2.VideoCapture(test_path)
@@ -228,11 +230,9 @@ def test_all_videos(model, dataset):
         result = "CORRECT" if true_label == pred_label else "WRONG"
         print(f"{os.path.basename(video_path)}: True={true_label}, Pred={pred_label} -> {result}")
 
-# ========== Main ==========
 def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, batch_size=1, out_dir="results", confusion=False, loss=False, debug=False):
     import json
     
-    # Set random seeds for reproducibility
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -251,18 +251,14 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
         print(f"No .mov files found in {train_root}")
         return
     
-    # Limit dataset to num_words if specified
     if num_words is not None and num_words < len(train_dataset):
-        # Get unique classes and limit to num_words
         unique_classes = list(set(train_dataset.labels))
         selected_classes = unique_classes[:num_words]
         
-        # Filter dataset to only include selected classes
         filtered_indices = [i for i, label in enumerate(train_dataset.labels) if label in selected_classes]
         train_dataset.video_paths = [train_dataset.video_paths[i] for i in filtered_indices]
         train_dataset.labels = [train_dataset.labels[i] for i in filtered_indices]
         
-        # Re-encode labels for filtered dataset
         train_dataset.encoder = LabelEncoder()
         train_dataset.encoded_labels = train_dataset.encoder.fit_transform(train_dataset.labels)
         
@@ -289,7 +285,6 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     
-    # Track losses for plotting
     epoch_losses = []
     
     print(f"Training MediaPipe-{backend} model for {epochs} epochs on {num_classes} classes...")
@@ -311,11 +306,10 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
                 pbar.set_postfix({'Loss': f'{total_loss/total:.4f}',
                                   'Acc': f'{correct/total:.3f}' if total > 0 else '0.000'})
         
-        # Track epoch loss
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_losses.append(epoch_loss)
         print(f"Epoch {epoch+1}: Loss={epoch_loss:.4f}, Train Acc={correct/total:.3f}")
-    # Final evaluation
+    
     print("Evaluating on training set...")
     train_correct, train_total = 0, 0
     with torch.no_grad():
@@ -332,12 +326,9 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
         print(f"No .mov files found in {test_root}")
         return
     
-    # Filter test dataset to match training classes if num_words was specified
     if num_words is not None:
-        # Get the classes used in training
         train_classes = set(train_dataset.labels)
         
-        # Filter test dataset to only include videos from training classes
         filtered_test_indices = [i for i, label in enumerate(test_dataset.labels) if label in train_classes]
         test_dataset.video_paths = [test_dataset.video_paths[i] for i in filtered_test_indices]
         test_dataset.labels = [test_dataset.labels[i] for i in filtered_test_indices]
@@ -345,7 +336,6 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
         if debug:
             print(f"Filtered test dataset to {len(test_dataset)} videos from training classes")
     
-    # Use the same encoder as training
     test_dataset.encoder = train_dataset.encoder
     test_dataset.encoded_labels = train_dataset.encoder.transform(test_dataset.labels)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -360,13 +350,10 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
     test_acc = test_correct / test_total if test_total > 0 else 0.0
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     
-    # Generate plots if requested
     if confusion or loss:
-        # Collect actual and predicted words for confusion matrix
         actual_words = []
         predicted_words = []
         
-        # Get predictions for confusion matrix
         model.eval()
         with torch.no_grad():
             for x, y in test_loader:
@@ -374,19 +361,16 @@ def run_mediapipe(num_words=None, backend="transformer", seed=42, epochs=20, bat
                 logits = model(x)
                 pred = logits.argmax(1)
                 
-                # Convert indices to words
                 for i in range(len(y)):
                     actual_word = test_dataset.encoder.inverse_transform([y[i].item()])[0]
                     predicted_word = test_dataset.encoder.inverse_transform([pred[i].item()])[0]
                     actual_words.append(actual_word)
                     predicted_words.append(predicted_word)
         
-        # Create confusion matrix if requested
         if confusion:
             from utils.plot_utils import create_confusion_matrix
             create_confusion_matrix(actual_words, predicted_words, f"mediapipe_{backend}")
         
-        # Create loss graph if requested
         if loss and epoch_losses:
             from utils.plot_utils import create_loss_graph
             create_loss_graph(epoch_losses, f"mediapipe_{backend}")

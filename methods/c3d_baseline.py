@@ -1,4 +1,14 @@
-# pip install torch torchvision opencv-python
+"""
+C3D Baseline for PSL Sign Language Recognition
+
+This is a baseline method using 3D Convolutional Networks for video classification.
+It is used for comparing our main method (zero-shot semantic matching) with traditional 
+deep learning approaches.
+
+Method: Uses 3D CNNs (ResNet3D-18 or custom compact architecture) to process video
+clips directly, learning spatiotemporal features for sign classification.
+"""
+
 import os, cv2, torch, torch.nn as nn, torch.optim as optim
 import random, json, time
 from torch.utils.data import Dataset, DataLoader
@@ -10,12 +20,11 @@ from tqdm import tqdm
 
 class VideoISLR3D(Dataset):
     def __init__(self, root, clip_len=16, size=112):
-        self.samples = []  # List[Tuple[path, class_idx]]
-        self.classes = []  # List[str]
+        self.samples = []
+        self.classes = []
         self.class_to_idx = {}
 
         entries = sorted(os.listdir(root))
-        # Collect directory-structured classes
         dir_classes = [d for d in entries if os.path.isdir(os.path.join(root, d))]
         for c in dir_classes:
             self.class_to_idx.setdefault(c, len(self.classes))
@@ -26,7 +35,6 @@ class VideoISLR3D(Dataset):
                 if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
                     self.samples.append((os.path.join(cdir, f), self.class_to_idx[c]))
 
-        # Also support flat layout: each .mp4 is its own class (video name)
         for f in entries:
             fpath = os.path.join(root, f)
             if os.path.isfile(fpath) and f.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
@@ -40,7 +48,7 @@ class VideoISLR3D(Dataset):
         self.resize = transforms.Resize((size, size))
         self.to_tensor = transforms.ToTensor()
         self.norm = transforms.Normalize([0.43216, 0.394666, 0.37645],
-                                         [0.22803, 0.22145, 0.216989])  # Kinetics-400 stats
+                                         [0.22803, 0.22145, 0.216989])
 
     def _read_rgb(self, path):
         cap = cv2.VideoCapture(path); frames=[]
@@ -62,11 +70,11 @@ class VideoISLR3D(Dataset):
         idxs = self._sample_idx(len(frames))
         clip = []
         for j in idxs:
-            img = self.to_tensor(frames[j])         # [3,H,W]
-            img = self.resize(img)                  # [3,112,112]
+            img = self.to_tensor(frames[j])
+            img = self.resize(img)
             img = self.norm(img)
             clip.append(img)
-        x = torch.stack(clip, dim=1)                # [3,T,H,W]
+        x = torch.stack(clip, dim=1)
         return x, y
 
     def __len__(self): return len(self.samples)
@@ -79,7 +87,7 @@ def make_model(num_classes, pretrained=True):
     m.fc = nn.Linear(m.fc.in_features, num_classes)
     return m
 
-class TinyC3D(nn.Module):
+class CompactC3D(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
         self.features = nn.Sequential(
@@ -99,13 +107,11 @@ class TinyC3D(nn.Module):
         )
         self.classifier = nn.Linear(512, num_classes)
 
-    def forward(self, x):              # x: [B,3,T,112,112]
-        f = self.features(x)           # [B,512,1,1,1]
+    def forward(self, x):
+        f = self.features(x)
         return self.classifier(f.view(x.size(0), -1))
 
-
 def _remap_subset(samples):
-    """Remap labels in given sample list to a compact 0..K-1 space."""
     old_to_new = {}
     new_samples = []
     next_idx = 0
@@ -116,13 +122,10 @@ def _remap_subset(samples):
         new_samples.append((path, old_to_new[y]))
     return new_samples, next_idx
 
-
 def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, batch_size: int = 1, confusion=False, loss=False):
-    """Run C3D pipeline on all words from Words_train, test on Words_test."""
     train_root = "data/Words_train"
     test_root = "data/Words_test"
     
-    # Load training dataset - ALL words from Words_train
     train_ds = VideoISLR3D(train_root, clip_len=16, size=112)
     if len(train_ds) == 0:
         print(f"No videos found in {train_root}")
@@ -131,23 +134,18 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
     print(f"Training dataset: {len(train_ds)} videos, {len(train_ds.classes)} classes")
     print(f"Classes: {train_ds.classes}")
     
-    # Create training loader with ALL data
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
     num_classes = len(train_ds.classes)
     
-    # Get best available device (CUDA > MPS > CPU)
     device = get_best_device(method_name="c3d")
     device_info()
     model = make_model(num_classes, pretrained=use_pretrained).to(device)
     
-    # Training setup
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    # Track losses for plotting
     epoch_losses = []
     
-    # Training loop
     print(f"Training C3D model for {epochs} epochs on {num_classes} classes...")
     for epoch in range(epochs):
         model.train()
@@ -155,7 +153,6 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
         correct = 0
         total = 0
         
-        # Progress bar for each epoch
         with tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}") as pbar:
             for x, y in pbar:
                 x = to_device(x, device)
@@ -172,13 +169,11 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
                 correct += (pred == y).sum().item()
                 total += y.size(0)
                 
-                # Update progress bar with loss
                 pbar.set_postfix({
                     'Loss': f'{total_loss/total:.4f}',
                     'Acc': f'{correct/total:.3f}' if total > 0 else '0.000'
                 })
         
-        # Print epoch summary
         epoch_loss = total_loss / total if total > 0 else 0.0
         epoch_acc = correct / total if total > 0 else 0.0
         epoch_losses.append(epoch_loss)
@@ -186,7 +181,6 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
     
     model.eval()
     
-    # Test on training set (to check overfitting)
     print("\nEvaluating on training set...")
     train_correct = 0
     train_total = 0
@@ -200,14 +194,12 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
             train_total += y.size(0)
     train_acc = (train_correct / train_total) if train_total > 0 else 0.0
     
-    # Test on test set (different videos, same classes)
     print("Evaluating on test set...")
     test_ds = VideoISLR3D(test_root, clip_len=16, size=112)
     if len(test_ds) == 0:
         print(f"No videos found in {test_root}")
         return
     
-    # Important: Use the same class mapping as training
     test_ds.class_to_idx = train_ds.class_to_idx
     test_ds.classes = train_ds.classes
     
@@ -230,13 +222,10 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
     print(f"Test Accuracy: {test_acc:.3f} ({test_correct}/{test_total})")
     print(f"Classes: {num_classes}")
 
-    # Generate plots if requested
     if confusion or loss:
-        # Collect actual and predicted words for confusion matrix
         actual_words = []
         predicted_words = []
         
-        # Get predictions for confusion matrix
         model.eval()
         with torch.no_grad():
             for x, y in test_loader:
@@ -245,25 +234,21 @@ def run_c3d(num_words=1, use_pretrained=True, seed: int = 42, epochs: int = 20, 
                 logits = model(x)
                 pred = logits.argmax(1)
                 
-                # Convert indices to words
                 for i in range(len(y)):
                     actual_word = test_ds.classes[y[i].item()]
                     predicted_word = test_ds.classes[pred[i].item()]
                     actual_words.append(actual_word)
                     predicted_words.append(predicted_word)
         
-        # Create confusion matrix if requested
         if confusion:
             create_confusion_matrix(actual_words, predicted_words, "c3d")
         
-        # Create loss graph if requested
         if loss and epoch_losses:
             create_loss_graph(epoch_losses, "c3d")
 
-    # Return results for main.py to handle
     return {
         "method": "c3d",
-        "num_words": num_classes,  # Use actual number of classes
+        "num_words": num_classes,
         "train_accuracy": train_acc,
         "test_accuracy": test_acc,
         "epochs": epochs
